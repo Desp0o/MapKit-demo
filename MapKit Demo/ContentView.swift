@@ -16,6 +16,7 @@ struct ContentView: View {
   @State private var mapSelection: MKMapItem?
   @State private var searchResults: [MKMapItem] = []
   @State private var showPlaceDetails: Bool = false
+  @State private var lookAround: MKLookAroundScene?
   
   var body: some View {
     if let coordinates = locationManager.currentCoordinates {
@@ -26,7 +27,6 @@ struct ContentView: View {
           let place = item.placemark
           Marker(place.title ?? "", coordinate: place.coordinate)
         }
-        
       }
       .mapControlVisibility(.visible)
       .mapControls {
@@ -41,6 +41,8 @@ struct ContentView: View {
         if newValue != nil {
           showPlaceDetails = true
         }
+        
+        fetchLookAroundPreview()
       }
       .overlay(alignment: .bottom) {
         TextField("search", text: $query)
@@ -59,8 +61,17 @@ struct ContentView: View {
             Text("\(place.placemark.title ?? "")")
             Text("\(place.placemark.subtitle ?? "")")
           }
+          
+          if let scene = lookAround {
+            LookAroundPreview(initialScene: scene, allowsNavigation: true, showsRoadLabels: true)
+          } else {
+            ContentUnavailableView("No Preview", systemImage: "eye.slash")
+          }
         }
         .presentationDetents([.medium])
+        .onAppear {
+          fetchLookAroundPreview()
+        }
         .onDisappear {
           mapSelection = nil
         }
@@ -88,13 +99,24 @@ extension ContentView {
     )
     camera = .region(MKCoordinateRegion(
       center: coordinates,
-      latitudinalMeters: 2000,
-      longitudinalMeters: 2000
+      latitudinalMeters: 1000,
+      longitudinalMeters: 1000
     ))
     
     let res = try? await MKLocalSearch(request: request).start()
     searchResults = res?.mapItems ?? []
     print(searchResults)
+  }
+  
+  func fetchLookAroundPreview() {
+    if let mapSelection {
+      lookAround = nil
+      
+      Task {
+        let req = MKLookAroundSceneRequest(mapItem: mapSelection)
+        lookAround = try? await req.scene
+      }
+    }
   }
 }
 
