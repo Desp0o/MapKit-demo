@@ -1,0 +1,15 @@
+{
+  "originHash" : "e55b3198a409cbe064a1835d177e1e8b93b3acb06e8d23c5a8721b2d4898a7dc",
+  "pins" : [
+    {
+      "identity" : "izzilocationkit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/Desp0o/IzziLocationKit.git",
+      "state" : {
+        "branch" : "main",
+        "revision" : "ecf5d39fd75373173489eecec81fd8844de88e28"
+      }
+    }
+  ],
+  "version" : 3
+}
