@@ -18,6 +18,11 @@ struct ContentView: View {
   @State private var showPlaceDetails: Bool = false
   @State private var lookAround: MKLookAroundScene?
   
+  @State private var getDirections: Bool = false
+  @State private var routeDisplaying: Bool = false
+  @State private var route: MKRoute?
+  @State private var routeDestination: MKMapItem?
+  
   var body: some View {
     if let coordinates = locationManager.currentCoordinates {
       Map(position: $camera, selection: $mapSelection) {
@@ -26,6 +31,11 @@ struct ContentView: View {
         ForEach(searchResults, id: \.self) { item in
           let place = item.placemark
           Marker(place.title ?? "", coordinate: place.coordinate)
+        }
+        
+        if let route {
+          MapPolyline(route.polyline)
+            .stroke(.blue, lineWidth: 8)
         }
       }
       .mapControlVisibility(.visible)
@@ -42,7 +52,9 @@ struct ContentView: View {
           showPlaceDetails = true
         }
         
-        fetchLookAroundPreview()
+        Task {
+          await fetchLookAroundPreview()
+        }
       }
       .overlay(alignment: .bottom) {
         TextField("search", text: $query)
@@ -55,26 +67,13 @@ struct ContentView: View {
           await searchPlaces()
         }
       }
-      .sheet(isPresented: $showPlaceDetails) {
-        VStack {
-          if let place = mapSelection {
-            Text("\(place.placemark.title ?? "")")
-            Text("\(place.placemark.subtitle ?? "")")
+      .sheet(isPresented: $showPlaceDetails, onDismiss: {
+        mapSelection = nil
+      }) {
+        PlaceDetails(mapSelection: $mapSelection, lookAround: $lookAround, getDirection: $getDirections, getRoute: fetchRoute)
+          .task {
+            await fetchLookAroundPreview()
           }
-          
-          if let scene = lookAround {
-            LookAroundPreview(initialScene: scene, allowsNavigation: true, showsRoadLabels: true)
-          } else {
-            ContentUnavailableView("No Preview", systemImage: "eye.slash")
-          }
-        }
-        .presentationDetents([.medium])
-        .onAppear {
-          fetchLookAroundPreview()
-        }
-        .onDisappear {
-          mapSelection = nil
-        }
       }
     }
     else {
@@ -87,8 +86,6 @@ struct ContentView: View {
 extension ContentView {
   func searchPlaces() async {
     guard let coordinates = locationManager.currentCoordinates else { return }
-    
-    print(coordinates)
     
     let request = MKLocalSearch.Request()
     request.naturalLanguageQuery = query
@@ -105,10 +102,9 @@ extension ContentView {
     
     let res = try? await MKLocalSearch(request: request).start()
     searchResults = res?.mapItems ?? []
-    print(searchResults)
   }
   
-  func fetchLookAroundPreview() {
+  @MainActor func fetchLookAroundPreview() async {
     if let mapSelection {
       lookAround = nil
       
@@ -118,8 +114,37 @@ extension ContentView {
       }
     }
   }
+  
+  func fetchRoute() {
+    if let mapSelection {
+      let request = MKDirections.Request()
+      
+      guard let coordinates = locationManager.currentCoordinates else { return }
+      
+      request.source = MKMapItem(placemark: .init(coordinate: coordinates))
+      request.destination = mapSelection
+      
+      Task {
+        let result = try? await MKDirections(request: request).calculate()
+        route = result?.routes.first
+        routeDestination = mapSelection
+        
+        withAnimation(.snappy) {
+          routeDisplaying = true
+          showPlaceDetails = false
+          
+          if let rect = route?.polyline.boundingMapRect, routeDisplaying {
+            camera = .rect(rect)
+          }
+        }
+      }
+    }
+  }
 }
 
 #Preview {
   ContentView()
 }
+
+
+
